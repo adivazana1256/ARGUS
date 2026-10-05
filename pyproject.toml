@@ -8,6 +8,7 @@ dynamic = ["version"]
 dependencies = [
   "pydantic>=2",
   "pydantic-settings>=2",
+  "structlog>=26.1.0",
 ]
 
 [dependency-groups]
