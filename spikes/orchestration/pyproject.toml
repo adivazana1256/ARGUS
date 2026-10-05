@@ -1,0 +1,26 @@
+[project]
+name = "argus-orchestration-spike"
+version = "0.0.1"
+description = "Architecture spike: LangGraph vs OpenAI Agents SDK for ARGUS (ADR-002)"
+requires-python = ">=3.11"
+# Pinned to what the spike was run against. Isolated from the future ARGUS app.
+dependencies = [
+    "pydantic==2.13.5",
+    "langgraph==1.2.12",
+    "langgraph-checkpoint==4.2.0",
+    "openai-agents==0.23.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-ra"
+filterwarnings = [
+    "ignore:Deserializing unregistered type.*",
+]
