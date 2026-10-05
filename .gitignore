@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Virtual environments
+.venv/
+
+# Environment / secrets (M0 spec §5, SECURITY.md §10)
+.env
+
+# Tooling caches
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
