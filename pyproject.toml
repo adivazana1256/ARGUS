@@ -22,6 +22,7 @@ dev = [
   "pytest",
   "pytest-cov",  # coverage gate (M0 spec §7.5)
   "httpx",  # required by FastAPI/Starlette TestClient
+  "pre-commit>=4.6.2",  # fast commit-time hooks (M0 spec §8); dev-only, never in the image
 ]
 
 [build-system]
