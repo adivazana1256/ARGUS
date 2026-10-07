@@ -1,11 +1,20 @@
 # ARGUS production image (M0 spec §9). Multi-stage, non-root, runtime-only deps.
 #
 # Stage 1 (builder): resolve + install EXACTLY what uv.lock pins into a venv.
-# Stage 2 (runtime): copy only that venv onto a clean python:3.12-slim. No uv,
+# Stage 2 (runtime): copy only that venv onto a clean python:3.12-alpine. No uv,
 # no build toolchain, no dev/test deps, no source tree, no package caches.
+#
+# Base is Alpine (musl), not Debian slim: the slim/trixie base ships OS packages
+# (util-linux/ncurses/systemd/perl-base) carrying unfixed HIGH CVEs with no
+# available fix, which the Slice 9 Trivy gate (HIGH/CRITICAL, no ignore-unfixed)
+# blocks on. Alpine does not ship those packages -> 0 HIGH / 0 CRITICAL. Every
+# current ARGUS dependency (incl. the pydantic-core Rust ext) ships musllinux
+# wheels, so no compiler/build-base is needed here.
+# REVISIT if ARGUS adds an in-process ML dep with no musllinux wheel (e.g. torch,
+# onnxruntime): move to a glibc minimal base (e.g. Debian distroless) then.
 
 # --- Stage 1: builder -------------------------------------------------------
-FROM python:3.12-slim AS builder
+FROM python:3.12-alpine AS builder
 
 # Pinned uv binary (reproducible tooling). uv itself never ships in the runtime
 # image — it exists only to perform the locked install here.
@@ -42,7 +51,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable
 
 # --- Stage 2: runtime -------------------------------------------------------
-FROM python:3.12-slim AS runtime
+FROM python:3.12-alpine AS runtime
 
 # Minimal OCI metadata the build actually knows (§6). No invented version.
 LABEL org.opencontainers.image.title="argus" \
@@ -50,8 +59,9 @@ LABEL org.opencontainers.image.title="argus" \
       org.opencontainers.image.source="https://github.com/adivazana/ARGUS"
 
 # Dedicated unprivileged user. No sudo, no shell login, no home clutter.
-RUN groupadd --system argus \
-    && useradd --system --gid argus --no-create-home --shell /usr/sbin/nologin argus
+# BusyBox addgroup/adduser (Alpine) instead of Debian groupadd/useradd.
+RUN addgroup -S argus \
+    && adduser -S -G argus -H -s /sbin/nologin argus
 
 # PYTHONUNBUFFERED: logs flush immediately (correct for container stdout).
 # PATH: the copied venv's bin first so `uvicorn`/`python` resolve to it.
