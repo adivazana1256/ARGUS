@@ -20,6 +20,7 @@ dev = [
   "ruff",
   "mypy",
   "pytest",
+  "pytest-cov",  # coverage gate (M0 spec §7.5)
   "httpx",  # required by FastAPI/Starlette TestClient
 ]
 
@@ -49,6 +50,24 @@ select = ["E", "F", "I", "UP", "B", "S"]
 [tool.pytest.ini_options]
 # Only our tests; spikes/ is frozen and isolated (M0 spec §1.2).
 testpaths = ["tests"]
+# The documented `pytest` invocation enforces the coverage gate (M0 spec §7.5,
+# §10): measure the argus package, show missing lines, fail under 85%.
+addopts = "--cov=argus --cov-report=term-missing --cov-fail-under=85"
+
+[tool.coverage.run]
+# Measure production source only; spikes/ is excluded entirely (M0 spec §7.5).
+source = ["argus"]
+# main.py is the thin uvicorn entrypoint (`app = create_app()`); the factory it
+# calls is covered via TestClient. Excluding the entrypoint is the one
+# justified omission (M0 spec §7.5).
+omit = ["*/argus/main.py"]
+
+[tool.coverage.report]
+show_missing = true
+# Minimal, justified exclusions only — no blanket pragmas (M0 spec §7.5).
+exclude_also = [
+  "if TYPE_CHECKING:",
+]
 
 [tool.mypy]
 python_version = "3.12"
