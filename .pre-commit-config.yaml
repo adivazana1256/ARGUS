@@ -1,0 +1,35 @@
+# ARGUS commit-time hooks (M0 spec §8). INTENTIONALLY FAST: Ruff, Gitleaks, and
+# lightweight file hygiene only. NO mypy, pytest, coverage, Docker, pip-audit,
+# Trivy, or CodeQL here — those live in `make check` / CI / Slice 9 so the commit
+# loop stays cheap enough that developers keep it enabled.
+#
+# Revisions are pinned (not floating). Ruff is pinned to the version in uv.lock
+# (0.16.10) so the hook and `make lint`/`make format-check` agree.
+
+repos:
+  # Ruff: lint (with autofix) + format. Same tool/config as pyproject.toml.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.10
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  # Gitleaks: M0 secret-scanning owner. Conservative defaults, no global
+  # suppressions, no custom regexes, no broad allowlists.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  # Lightweight file hygiene from the official pre-commit-hooks repo.
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: check-added-large-files

@@ -1,0 +1,50 @@
+# Strict build context (M0 spec §9.2). Keep the context tiny; guarantee no
+# secrets, dev files, tests, docs, or spike code enter the image.
+#
+# The locked Docker build needs ONLY: pyproject.toml, uv.lock, src/, README.md.
+# Everything else is excluded. Do NOT add those four here.
+
+# Version control / forge
+.git
+.gitignore
+.github
+
+# Virtual environments (host venv must never leak into the image)
+.venv
+venv
+
+# Python caches / build artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Tooling caches
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Secrets / local env (never copy .env into the image)
+.env
+*.env
+!.env.example
+
+# Not needed at runtime
+tests/
+docs/
+spikes/
+
+# Editor / IDE metadata
+.vscode/
+.idea/
+*.swp
+
+# OS metadata
+.DS_Store
+
+# Container files themselves
+Dockerfile
+.dockerignore
