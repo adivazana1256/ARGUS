@@ -8,7 +8,7 @@
 # Local-only, predictable dev image tag. Never pushed anywhere (M0 spec §12).
 IMAGE ?= argus:dev
 
-.PHONY: help sync lint format format-check typecheck test check \
+.PHONY: help sync lint format format-check typecheck test check audit security \
         docker-build hooks-install hooks-run clean
 
 help: ## Show this help.
@@ -36,6 +36,24 @@ test: ## Run pytest (coverage gate enforced by pyproject.toml).
 # Fail-fast local quality gate, cheap-to-expensive (mirrors CI, M0 spec §10).
 # Coverage threshold is NOT repeated here — pytest config owns it.
 check: sync lint format-check typecheck test ## Full local quality gate.
+
+# Python dependency vulnerability audit (M0 spec §11; pip-audit owns this layer).
+# Audits the locked/synced environment against the PyPA/OSV advisory DB. Needs
+# network. NOT part of `make check` (keeps the dev gate fast + offline) and NOT a
+# pre-commit hook (M0 spec §8). Reports findings; never auto-fixes or ignores.
+audit: ## pip-audit the locked Python environment (needs network).
+	uv run pip-audit
+
+# Full security scan surface (M0 spec §13): gitleaks detect + pip-audit. Secrets
+# first (Gitleaks owns that layer, §10), then dependency CVEs (reuses `audit`).
+# NOT part of `make check` (§13 keeps the pre-PR gate fast/offline) and NOT a
+# pre-commit hook. Gitleaks is a separate binary, not a uv dep: if it is not
+# installed we fail honestly with the install pointer instead of silently
+# downloading a binary. Local prerequisite: https://github.com/gitleaks/gitleaks#installing
+security: ## gitleaks detect + pip-audit (requires gitleaks installed locally).
+	@command -v gitleaks >/dev/null 2>&1 || { echo "gitleaks not installed; install it: https://github.com/gitleaks/gitleaks#installing"; exit 1; }
+	gitleaks detect --source . --redact --verbose
+	$(MAKE) audit
 
 docker-build: ## Build the production image with the local dev tag.
 	docker build -t $(IMAGE) .

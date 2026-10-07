@@ -23,6 +23,7 @@ dev = [
   "pytest-cov",  # coverage gate (M0 spec §7.5)
   "httpx",  # required by FastAPI/Starlette TestClient
   "pre-commit>=4.6.2",  # fast commit-time hooks (M0 spec §8); dev-only, never in the image
+  "pip-audit>=2.10.1",  # Python dependency vuln audit (M0 spec §11, Slice 9); dev-only, never in the image
 ]
 
 [build-system]

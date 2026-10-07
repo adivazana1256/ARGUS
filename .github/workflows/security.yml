@@ -1,0 +1,131 @@
+# ARGUS security automation (M0 spec §10/§11, Slice 9). Kept OUT of ci.yml so
+# ownership stays clear: ci.yml = quality gates + Docker build; this workflow =
+# supply-chain scanning. Each layer has exactly one authority (M0 spec §10):
+#   - Gitleaks   -> committed secrets/credentials (diffs + history)
+#   - pip-audit  -> Python dependency vulnerabilities (PyPA/OSV advisory DB)
+#   - Trivy      -> built container image CVEs (OS/base-image + system libs)
+# CodeQL (SAST) lives in codeql.yml. Gitleaks also runs pre-commit (§8); this is
+# the CI half required by M0 spec §10/§11 ("pre-commit + CI every PR") — the
+# pre-commit hook is NOT removed, and no second secret scanner is added.
+# No filesystem/repo Trivy scan here — that would re-scan the Python deps
+# pip-audit already owns (M0 spec §10, decision 11).
+
+name: Security
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Least privilege (M0 spec §12): read-only token. These jobs only read code and
+# build/scan locally — no SARIF upload, so no security-events write is needed.
+# No registry login, no push, no deploy, no repository secrets.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secret-scan:
+    name: Secret scan (Gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4  # first-party: major tag per M0 spec §12
+        with:
+          # `gitleaks detect` walks the entire commit graph, so CI must fetch the
+          # full history, not the default shallow clone. This scans the whole
+          # repository history on every PR (and every push to main) — not just
+          # the PR diff — because M0 spec §10/§11 require secrets caught in
+          # "diffs and history", and a full sweep also catches anything a
+          # bypassed (`--no-verify`) local pre-commit hook would have missed.
+          fetch-depth: 0
+
+      # Gitleaks owns secret scanning (M0 spec §10, one authority per layer).
+      # Direct invocation of the OFFICIAL image — deliberately NOT gitleaks-action,
+      # so no GITLEAKS_LICENSE / token is ever required: public ARGUS CI runs with
+      # zero repository secrets (M0 spec §12; task §1). Image pinned to an
+      # immutable digest (§12); the v8.30.1 tag matches the pre-commit hook so
+      # local and CI run one Gitleaks version. `detect` = full-history scan;
+      # --redact keeps any match value out of the log; non-zero exit on a finding
+      # fails CI. No allowlist, no .gitleaksignore, no suppression.
+      - name: Gitleaks detect (full history)
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/repo" \
+            ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f \
+            detect --source=/repo --redact --verbose
+
+  audit:
+    name: Python dependency audit (pip-audit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      UV_PYTHON_PREFERENCE: only-system
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4  # first-party: major tag per M0 spec §12
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5  # first-party: major tag per M0 spec §12
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        # third-party: pinned to an immutable commit SHA per M0 spec §12.
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6.8.0
+        with:
+          enable-cache: true
+
+      - name: Install locked dependencies
+        run: make sync  # uv sync --frozen (fails on a stale uv.lock)
+
+      # Audits the locked/synced environment against the PyPA/OSV advisory DB.
+      # Non-zero exit on any known vulnerability -> fails CI. No ignore list, no
+      # severity suppression: findings are reported and decided by human review
+      # (M0 spec §11; Slice 9 vulnerability policy).
+      - name: pip-audit
+        run: make audit
+
+  image-scan:
+    name: Container image scan (Trivy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4  # first-party: major tag per M0 spec §12
+
+      # Build the real production image locally. Never pushed, no registry
+      # login, no deploy (M0 spec §12). Same Makefile target as ci.yml so the
+      # build command has one owner.
+      - name: Build production image
+        run: make docker-build IMAGE=argus:scan
+
+      # Scan the built image for OS/base-image + system-library CVEs — the layer
+      # pip-audit cannot see. Policy (M0 spec §10/§11, Slice 9):
+      #   severity: CRITICAL,HIGH  — meaningful severities only; LOW/MEDIUM are
+      #       reported in the log table but do not block.
+      #   exit-code: 1             — fail CI on any matching finding.
+      # HIGH/CRITICAL image vulnerabilities are BLOCKING and are not hidden
+      # merely because no fix is currently available: there is no
+      # `ignore-unfixed`, so fixed AND unfixed findings are visible and may fail
+      # the gate. Human review decides remediation or any future, narrowly-scoped
+      # exception. No broad suppression, no .trivyignore created preemptively, no
+      # vuln-ID ignore list (M0 spec §10/§11, Slice 9 vulnerability policy).
+      - name: Trivy image scan
+        # third-party (Aqua Security, official): pinned to an immutable commit SHA.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+        with:
+          image-ref: argus:scan
+          scan-type: image
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          vuln-type: os,library
+          scanners: vuln
+        env:
+          # Pull the vuln DB from GHCR (Aqua's published mirror) to avoid
+          # Docker Hub anonymous rate limits on hosted runners. No auth needed.
+          TRIVY_DB_REPOSITORY: ghcr.io/aquasecurity/trivy-db

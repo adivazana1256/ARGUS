@@ -1,0 +1,56 @@
+# ARGUS CodeQL SAST (M0 spec §10/§11, Slice 9). The single SAST authority for
+# ARGUS's own Python — distinct from Ruff `S` lint (fast heuristics), pip-audit
+# (dependency CVEs) and Trivy (image CVEs). Dedicated workflow so SAST ownership
+# and its elevated permission scope stay isolated from ci.yml/security.yml.
+#
+# Python only — no language matrix (ARGUS is a single-language codebase; a
+# matrix would add parallel jobs with nothing to analyze). Does NOT re-run
+# Ruff/mypy/pytest: CodeQL needs no build step for interpreted Python
+# (build-mode: none), so there is nothing to duplicate.
+
+name: CodeQL
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # Weekly re-scan (Mon 06:00 UTC) catches newly-disclosed query results in
+    # code that hasn't changed. Mandated by M0 spec §11 (PR + scheduled) and
+    # §18.2 item B (PR + weekly schedule).
+    - cron: "0 6 * * 1"
+
+# Least privilege (M0 spec §12): read-only by default; the analyze job elevates
+# ONLY to what CodeQL needs to publish results.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (Python)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      security-events: write  # required: upload CodeQL results to code scanning
+      actions: read           # required: read workflow run metadata
+      contents: read          # checkout only
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4  # first-party: major tag per M0 spec §12
+
+      - name: Initialize CodeQL
+        # GitHub official action, SHA-pinned per M0 spec §12.
+        uses: github/codeql-action/init@1190a975f95ce23525efb6a3fc21ea29567c1b52  # v3
+        with:
+          languages: python
+          # Python is interpreted: no compilation, so no build step is needed.
+          build-mode: none
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@1190a975f95ce23525efb6a3fc21ea29567c1b52  # v3
+        with:
+          category: "/language:python"

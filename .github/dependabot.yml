@@ -1,0 +1,38 @@
+# ARGUS dependency-update automation (M0 spec §11/§12, Slice 9). Covers the two
+# ecosystems ARGUS actually uses: the uv-managed Python project (uv.lock is the
+# source of truth, M0 spec §3) and the GitHub Actions pinned in .github/workflows.
+#
+# No Docker ecosystem: the image base is deliberately pinned (M0 spec §3.4/§9)
+# and built-image CVE currency is already owned by Trivy (security.yml). Adding
+# it would overlap that authority without a concrete M0 need (task §4, spec §10).
+#
+# Dependabot opens PRs only — it never auto-merges. Updates still pass CI, the
+# security workflows and human review (M0 spec §2 / ENGINEERING_LOOP §10).
+version: 2
+updates:
+  # Python dependencies — updates pyproject.toml bounds + uv.lock.
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    # Batch low-risk minor/patch bumps into ONE PR to cut noise; majors still
+    # arrive as individual PRs so breaking changes get reviewed on their own.
+    groups:
+      python-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # GitHub Actions — keeps the SHA-pinned third-party actions current (M0 spec
+  # §12: Dependabot bumps the pins with provenance).
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    # Action bumps are low-risk and few; one grouped PR per week.
+    groups:
+      github-actions:
+        patterns: ["*"]
