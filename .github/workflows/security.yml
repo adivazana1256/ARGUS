@@ -34,7 +34,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout (full history)
-        uses: actions/checkout@v4  # first-party: major tag per M0 spec §12
+        uses: actions/checkout@v7  # first-party: major tag per M0 spec §12
         with:
           # `gitleaks detect` walks the entire commit graph, so CI must fetch the
           # full history, not the default shallow clone. This scans the whole
@@ -66,16 +66,16 @@ jobs:
       UV_PYTHON_PREFERENCE: only-system
     steps:
       - name: Checkout
-        uses: actions/checkout@v4  # first-party: major tag per M0 spec §12
+        uses: actions/checkout@v7  # first-party: major tag per M0 spec §12
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5  # first-party: major tag per M0 spec §12
+        uses: actions/setup-python@v7  # first-party: major tag per M0 spec §12
         with:
           python-version: "3.12"
 
       - name: Set up uv
         # third-party: pinned to an immutable commit SHA per M0 spec §12.
-        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6.8.0
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
         with:
           enable-cache: true
 
@@ -95,7 +95,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4  # first-party: major tag per M0 spec §12
+        uses: actions/checkout@v7  # first-party: major tag per M0 spec §12
 
       # Build the real production image locally. Never pushed, no registry
       # login, no deploy (M0 spec §12). Same Makefile target as ci.yml so the

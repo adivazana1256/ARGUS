@@ -41,16 +41,16 @@ jobs:
       UV_PYTHON_PREFERENCE: only-system
     steps:
       - name: Checkout
-        uses: actions/checkout@v4  # first-party: major tag per M0 spec §12
+        uses: actions/checkout@v7  # first-party: major tag per M0 spec §12
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5  # first-party: major tag per M0 spec §12
+        uses: actions/setup-python@v7  # first-party: major tag per M0 spec §12
         with:
           python-version: "3.12"
 
       - name: Set up uv
         # third-party: pinned to an immutable commit SHA per M0 spec §12.
-        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6.8.0
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
         with:
           enable-cache: true  # safe built-in cache (uv download cache, keyed on uv.lock)
 
@@ -78,7 +78,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4  # first-party: major tag per M0 spec §12
+        uses: actions/checkout@v7  # first-party: major tag per M0 spec §12
 
       # Build only — never pushed, no registry login, no deploy (M0 spec §12).
       # Uses the existing Makefile target so the build command has one owner.
