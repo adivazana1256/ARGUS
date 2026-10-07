@@ -1,0 +1,86 @@
+# ARGUS CI (M0 spec §10, Slice 8). Runs the same quality gates proven locally
+# via the Makefile, plus a production Docker build. One source of truth for
+# command semantics: every quality step calls an existing `make` target, which
+# wraps uv/tooling whose config lives in pyproject.toml. No tool args are
+# duplicated here, so CI cannot drift from local `make check`.
+#
+# Verification-only (M0 spec §12): Ruff runs in --check mode, mypy/pytest are
+# read-only. CI fails on bad formatting, never rewrites source.
+#
+# Out of scope for Slice 8 (owned by Slice 9): Gitleaks-in-CI, pip-audit,
+# CodeQL, Trivy, Dependabot. This workflow is quality gates + Docker build only.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Least privilege (M0 spec §12): read-only token, no write/packages/deploy/
+# security-events. No repository secrets are referenced anywhere below.
+permissions:
+  contents: read
+
+# Cancel an older in-flight run when a newer commit lands on the SAME ref.
+# Group is scoped by workflow + ref, so PRs and branches never cancel each
+# other (github.ref is refs/pull/<n>/merge for PRs, refs/heads/<branch> for
+# pushes) — only superseded runs of the same ref are cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quality gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Make uv reuse the interpreter setup-python provisions instead of
+    # downloading its own, so "Python 3.12" is pinned in exactly one place.
+    env:
+      UV_PYTHON_PREFERENCE: only-system
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4  # first-party: major tag per M0 spec §12
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5  # first-party: major tag per M0 spec §12
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        # third-party: pinned to an immutable commit SHA per M0 spec §12.
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6.8.0
+        with:
+          enable-cache: true  # safe built-in cache (uv download cache, keyed on uv.lock)
+
+      # Steps mirror `make check` (sync → lint → format-check → typecheck →
+      # test) but are split for CI observability: a failure names the gate.
+      # Coverage gate (>=85%) is enforced inside `make test` via pyproject.toml.
+      - name: Install locked dependencies
+        run: make sync  # uv sync --frozen (fails on a stale uv.lock)
+
+      - name: Ruff lint
+        run: make lint
+
+      - name: Ruff format check
+        run: make format-check
+
+      - name: Strict mypy
+        run: make typecheck
+
+      - name: Tests + coverage gate
+        run: make test
+
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4  # first-party: major tag per M0 spec §12
+
+      # Build only — never pushed, no registry login, no deploy (M0 spec §12).
+      # Uses the existing Makefile target so the build command has one owner.
+      - name: Build production image
+        run: make docker-build IMAGE=argus:ci
