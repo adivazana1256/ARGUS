@@ -1,11 +1,49 @@
 # ARGUS — Milestone 0: Production Engineering Foundation
 
-- Status: APPROVED (architecture review complete; not yet implemented)
-- Date: 2026-10-05
+- Status: **DELIVERED** (implemented across Slices 1–10; acceptance criteria §15 met)
+- Date: 2026-10-05 (approved) · 2026-10-07 (delivered)
 - Branch: `feat/m0-production-foundation`
-- Type: Implementation specification. No production code is implemented by this
-  document. The core engineering decisions below are human-approved (§18);
-  implementation proceeds as small reviewable slices (§17).
+- Type: Implementation specification. The core engineering decisions below are
+  human-approved (§18); implementation proceeded as small reviewable slices (§17).
+
+---
+
+## Delivery status (M0 complete)
+
+All §15 acceptance criteria are met: clean locked install, running service with
+`/health` `/ready` `/version`, quality gates (Ruff, strict mypy, pytest with
+coverage ≥ 85%), enforced import boundaries (no import from `spikes/`), a
+non-root container that builds and reports healthy, and the full security suite
+(Gitleaks, pip-audit, CodeQL, Trivy, Dependabot) wired to the documented policy.
+
+Deviations from this spec, as actually delivered (repo is the source of truth):
+
+- **System endpoints are mounted at the app root**, not under `/api/v1`. The
+  versioned router (§4.2) is deferred to the first business-route milestone;
+  liveness/readiness/version are intentionally unversioned. No `api/v1/` package
+  exists yet.
+- **One `dev` dependency group**, not separate `dev` + `test` groups (§3.3):
+  `uv sync --frozen` provisions all lint/type/test tooling. Runtime deps are
+  unchanged and still minimal.
+- **Security scanning lives in a dedicated `security.yml`**, split out of
+  `ci.yml` for clear ownership (ci = quality + build; security = supply chain).
+- **Container base is `python:3.12-alpine`, not `python:3.12-slim`** — see the
+  Slice 9 note on §9.1 / decision 8 below.
+
+### Slice 9 hardening — Alpine base (decision 8 / §9.1 superseded)
+
+The Slice 9 Trivy image gate (HIGH,CRITICAL, no `ignore-unfixed`) flagged 44
+unfixed HIGH CVEs in the Debian `slim` (trixie) base — OS packages
+(util-linux/ncurses/systemd/perl-base) with no available fix, not reachable by
+the service but blocking under the no-suppression policy. A tested comparison
+(slim-trixie vs slim-bookworm vs alpine) selected **`python:3.12-alpine`**: it
+ships none of those packages (**0 HIGH / 0 CRITICAL**), roughly halves image
+size (~228 MB → ~114 MB), and all current ARGUS deps provide musllinux wheels.
+Trade-off recorded in the `Dockerfile` header: revisit (move to a glibc minimal
+base such as distroless) only if ARGUS later adds an in-process ML dependency
+with no musllinux wheel (e.g. torch, onnxruntime). This supersedes the `slim`
+choice in decision 8 and §9.1; the multi-stage, non-root, runtime-only design is
+unchanged.
 
 ---
 

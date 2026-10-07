@@ -56,7 +56,7 @@ FROM python:3.12-alpine AS runtime
 # Minimal OCI metadata the build actually knows (§6). No invented version.
 LABEL org.opencontainers.image.title="argus" \
       org.opencontainers.image.description="ARGUS FastAPI service (M0 production foundation)." \
-      org.opencontainers.image.source="https://github.com/adivazana/ARGUS"
+      org.opencontainers.image.source="https://github.com/adivazana1256/ARGUS"
 
 # Dedicated unprivileged user. No sudo, no shell login, no home clutter.
 # BusyBox addgroup/adduser (Alpine) instead of Debian groupadd/useradd.
