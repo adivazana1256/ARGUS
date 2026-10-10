@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import pytest
 
+from argus.domain.domain import DomainIoc, parse_domain
 from argus.domain.ioc import (
     IocType,
     IocValidationError,
@@ -39,19 +40,36 @@ def test_dispatch_matches_direct_ipv4_parse() -> None:
     assert actionable.externally_actionable is False
 
 
+def test_valid_domain_dispatches_to_domain_entity() -> None:
+    ioc = parse_ioc("example.org")
+    assert isinstance(ioc, DomainIoc)
+    assert ioc.ioc_type == IocType.DOMAIN.value
+
+
+def test_dispatch_matches_direct_domain_parse() -> None:
+    # parse_ioc delegates to parse_domain — same classification, no reimplementation.
+    assert parse_ioc("Example.ORG.") == parse_domain("Example.ORG.")
+
+
+def test_ipv4_is_tried_before_domain() -> None:
+    # IPv4 is tried first, so a dotted-quad is classified as IPv4 and never
+    # reaches the domain parser (which rejects it anyway: all-numeric labels).
+    assert parse_ioc("8.8.8.8").ioc_type == IocType.IPV4.value
+
+
 # --------------------------------------------------------------------------- #
 # Explicit failure: well-formed-but-unsupported and malformed input both raise.
 # No silent pass-through, no coercion.
 # --------------------------------------------------------------------------- #
 
 # Well-formed indicators of types ARGUS does not classify yet. Each is a valid
-# domain / URL / SHA-256, so this guards against a future type silently slipping
-# through dispatch before its parser exists.
+# URL / SHA-256 / IPv6, so this guards against a future type silently slipping
+# through dispatch before its parser exists. (Domains ARE supported now — see the
+# domain dispatch cases above; a bare `example.com` no longer belongs here.)
 UNSUPPORTED: list[str] = [
-    "example.com",  # domain
-    "https://example.com/path",  # URL
+    "https://example.com/path",  # URL (scheme/path chars invalid as a domain)
     "hxxp://evil[.]com",  # defanged URL
-    "a" * 64,  # 64 hex-ish chars resembling a SHA-256
+    "a" * 64,  # 64 hex-ish chars, single label (no dot) — not a domain
     "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",  # SHA-256
     "::1",  # IPv6
 ]
