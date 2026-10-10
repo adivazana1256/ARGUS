@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
+from argus.domain.domain import DomainIoc, DomainValidationError, parse_domain
 from argus.domain.ipv4 import Ipv4Ioc, Ipv4ValidationError, parse_ipv4
 
 
@@ -33,12 +34,13 @@ class IocType(StrEnum):
     """Supported IOC types. One real member per type ARGUS can classify today."""
 
     IPV4 = "ipv4"
+    DOMAIN = "domain"
 
 
-# The IOC entity union. One member today; extends to ``Ipv4Ioc | DomainIoc | ...``
-# as types are added, at which point this becomes a pydantic discriminated union
-# keyed on ``ioc_type``.
-type Ioc = Ipv4Ioc
+# The IOC entity union. Plain union alias: it is a return annotation, not a
+# validated field, so no pydantic discriminated union is needed yet — introduce
+# that (keyed on ``ioc_type``) only once something validates an ``Ioc`` field.
+type Ioc = Ipv4Ioc | DomainIoc
 
 
 def parse_ioc(value: str) -> Ioc:
@@ -48,9 +50,14 @@ def parse_ioc(value: str) -> Ioc:
     Raises :class:`IocValidationError` if no supported type matches — explicitly,
     never by silent coercion or pass-through.
     """
-    # Ordered try-chain, one branch today. Replace with an ordered
-    # parser table once supported types exceed ~3.
+    # Ordered try-chain. IPv4 first (canonical numeric-dotted, narrowest), then
+    # domain. `8.8.8.8` is valid as both, so order decides it stays an IPv4.
+    # Replace with an ordered parser table once supported types exceed ~3.
     try:
         return parse_ipv4(value)
     except Ipv4ValidationError:
+        pass
+    try:
+        return parse_domain(value)
+    except DomainValidationError:
         raise IocValidationError(f"not a supported IOC: {value!r}") from None
