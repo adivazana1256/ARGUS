@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import ipaddress
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -106,6 +107,11 @@ class Ipv4Ioc(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
+    # Discriminator tag for the IOC entity layer (``argus.domain.ioc``). Kept as a
+    # Literal, not ``IocType``, so this module stays a leaf (stdlib + pydantic
+    # only): importing the enum would create an ``ioc`` <-> ``ipv4`` cycle. The
+    # string mirrors ``IocType.IPV4`` — the one deliberate duplication.
+    ioc_type: Literal["ipv4"] = "ipv4"
     raw: str
     normalized: str
     scope: Ipv4Scope
