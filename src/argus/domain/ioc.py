@@ -10,13 +10,15 @@ of supported types. Stdlib + pydantic only (AGENTS.md; ``docs/ARCHITECTURE.md``
 Dependency direction is one-way: ``ioc`` imports the type modules, never the
 reverse, so each type module stays an importable leaf. The ``Literal`` tag on
 each entity (e.g. ``Ipv4Ioc.ioc_type``) mirrors an :class:`IocType` value and is
-the discriminator a pydantic discriminated union will key on once a second type
-exists.
+the discriminator the :data:`Ioc` pydantic discriminated union keys on.
 """
 
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Annotated
+
+from pydantic import Field
 
 from argus.domain.domain import DomainIoc, DomainValidationError, parse_domain
 from argus.domain.ipv4 import Ipv4Ioc, Ipv4ValidationError, parse_ipv4
@@ -37,10 +39,13 @@ class IocType(StrEnum):
     DOMAIN = "domain"
 
 
-# The IOC entity union. Plain union alias: it is a return annotation, not a
-# validated field, so no pydantic discriminated union is needed yet — introduce
-# that (keyed on ``ioc_type``) only once something validates an ``Ioc`` field.
-type Ioc = Ipv4Ioc | DomainIoc
+# The IOC entity union — now a pydantic discriminated union keyed on the
+# ``ioc_type`` tag. Promoted from a plain alias by the Evidence Core (M1), which is
+# the first place an ``Ioc`` is a *validated field* (``EvidenceRecord.subject``)
+# rather than only a return annotation — the trigger this module anticipated. mypy
+# reads ``Annotated[T, ...]`` as ``T``, so it stays ``Ipv4Ioc | DomainIoc`` for
+# static callers; the discriminator metadata is consumed only by pydantic.
+type Ioc = Annotated[Ipv4Ioc | DomainIoc, Field(discriminator="ioc_type")]
 
 
 def parse_ioc(value: str) -> Ioc:
