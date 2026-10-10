@@ -521,6 +521,26 @@ Rules:
 - CI required before merge
 - protected main branch once remote repository exists
 
+### 11.1 Release automation conventions
+
+These make the push→PR→green cycle automatable while keeping the merge human-only.
+They are the canonical statement of the rules `AGENTS.md` points to.
+
+- **PR base is explicitly `main`.** Never rely on the default base. Create with an
+  explicit base (`gh pr create --base main …`).
+- **Verify the base after creation.** Confirm the opened PR actually targets `main`
+  (`gh pr view --json baseRefName`) before treating it as ready. A wrong base is a
+  material blocker — stop and report.
+- **Monitor the required checks.** Watch the required CI (`ci.yml`) and security
+  (`security.yml`, `codeql.yml`) checks to completion (`gh pr checks --watch`).
+- **Repair within the bounded loop.** A failing required check is a structured
+  failure (§8) repaired under `MAX_AUTONOMOUS_REPAIR_ITERATIONS = 3` (§7). After the
+  bound, stop, preserve evidence, escalate.
+- **Stop at a fully green PR.** "Green and merge-ready" is the terminal state for
+  autonomous work. Do not proceed past it.
+- **Merge is human-only.** No `gh pr merge`, no auto-merge, no base-branch change to
+  bypass review. The human performs the merge.
+
 ---
 
 ## 12. Pull Request Requirements

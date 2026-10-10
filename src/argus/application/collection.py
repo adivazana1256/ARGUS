@@ -40,8 +40,8 @@ Design decisions worth knowing before changing this (approved architecture gate)
 
 * **No network, no clock, no retries.** The clock is injected (``collected_at``);
   the loop is sequential and deterministic. Timeout/retry/rate-limit abstractions
-  are deliberately deferred — there is nothing offline to time out (ponytail: add
-  when a real network adapter justifies it).
+  are deliberately deferred: there is nothing offline to time out. They are added
+  when a real network adapter justifies them.
 """
 
 from __future__ import annotations

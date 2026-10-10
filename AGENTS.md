@@ -22,14 +22,31 @@ a passing gate. See [`README.md`](README.md), [`docs/ARCHITECTURE.md`](docs/ARCH
 
 The human owns the gate. See [`docs/ENGINEERING_LOOP.md`](docs/ENGINEERING_LOOP.md) §2, §10, §17.
 
-## Current scope (M1)
+## Autonomy envelope
 
-M1 = the **deterministic cyber core** (IOC type detection, normalization,
-validation, evidence model, deterministic risk triage), built as small vertical
-slices. Out of scope — do not add: agent framework, LangGraph, MCP, RAG, vector
-DB, PostgreSQL, model-provider calls, authn/authz logic, frontend, Kubernetes.
-See [`docs/milestones/M0_PRODUCTION_FOUNDATION.md`](docs/milestones/M0_PRODUCTION_FOUNDATION.md) §16 and
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §24.
+Within the prohibitions above you have maximum safe autonomy. Run the full
+engineering loop end to end without re-prompting:
+
+> inspect → plan only material decisions → implement → test/eval → independent
+> reviews → bounded repair → verify → diff review → **stop at the human gate**;
+> after human approval to open a PR: commit → push → PR targeting `main` → verify
+> base → monitor/fix required CI and security checks → **stop at a fully green PR**.
+
+Never merge. Never modify `main` directly. Never weaken a gate. Stop at a material
+blocker or at a green, merge-ready PR — the merge is the human's.
+
+## Current scope (M2)
+
+M2 = the **agentic investigator** built on the deterministic M1 core. Start from
+[`docs/milestones/M2_AGENTIC_INVESTIGATOR.md`](docs/milestones/M2_AGENTIC_INVESTIGATOR.md);
+it carries the product, architecture, evaluation and security context so a feature
+prompt can stay short.
+
+Still out of scope until its own slice or ADR introduces it: RAG, MCP, vector DB,
+PostgreSQL, Redis, new model providers, authn/authz logic, frontend, Kubernetes.
+The M1 deterministic core (IOC detection, normalization, validation, evidence,
+deterministic lifecycle) is complete and must stay deterministic. See
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §24 and ADR-002.
 
 ## Standing rules
 
@@ -50,6 +67,15 @@ See [`docs/milestones/M0_PRODUCTION_FOUNDATION.md`](docs/milestones/M0_PRODUCTIO
 - **Investigate, don't suppress.** A security or scanner finding is investigated
   and fixed at root cause, not silenced.
 - **"Agent finished" is not Done.** Done = [`docs/ENGINEERING_LOOP.md`](docs/ENGINEERING_LOOP.md) §10.
+- **Release automation.** When opening a PR: base is explicitly `main`, verify the
+  base after creation, monitor the required CI + security checks, repair failures
+  within the bounded loop, stop at a fully green PR. Merge is human-only. Full
+  conventions: [`docs/ENGINEERING_LOOP.md`](docs/ENGINEERING_LOOP.md) §11.1.
+- **Reviewer separation.** Builder, Tester, Reviewer, Security Reviewer and Eval
+  Reviewer are independent roles ([`docs/ENGINEERING_LOOP.md`](docs/ENGINEERING_LOOP.md) §6).
+  Run them as independent passes — the skills below, dispatched to separate
+  subagents where available — with one lead agent owning integration. No custom
+  multi-agent framework.
 
 ## Skills — load only when the trigger applies
 
@@ -63,5 +89,13 @@ Playbooks in `.agents/skills/`. Load the one whose trigger matches; don't load a
 - **`security-review`** — change touches external input, a trust boundary,
   secrets, SSRF/network, auth(z), tool/agent surfaces, deployment, or error/log
   output.
+- **`agentic-ai-review`** — change touches the agent loop, tool selection/execution,
+  model output handling, orchestration state, or HITL (M2+). Treats model output as
+  untrusted; checks tool-authority separation, bounded iteration, provenance and
+  stop reasons.
 - **`pr-readiness`** — change believed complete, before handing to the human gate.
   Assembles the evidence package and halts.
+
+Agent-behavior changes are evaluated with the convention in
+[`docs/EVAL_CONVENTION.md`](docs/EVAL_CONVENTION.md) (deterministic scenario evals,
+no paid calls).

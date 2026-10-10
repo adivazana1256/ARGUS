@@ -43,11 +43,16 @@ target-version = "py312"
 extend-exclude = ["spikes"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "S"]
+# T10 (flake8-debugger) and T20 (flake8-print) block debug leftovers in shipped
+# code — stray `breakpoint()`, `pdb`, and `print()` debugging. TODO/FIXME are NOT
+# prohibited: actionable, documented technical debt is allowed.
+select = ["E", "F", "I", "UP", "B", "S", "T10", "T20"]
 
 [tool.ruff.lint.per-file-ignores]
-# Tests legitimately use `assert` (S101).
-"tests/**" = ["S101"]
+# Tests legitimately use `assert` (S101) and `print` for diagnostics (T20).
+"tests/**" = ["S101", "T20"]
+# The offline example is a runnable demo whose whole job is printing (T20).
+"examples/**" = ["T20"]
 
 [tool.pytest.ini_options]
 # Only our tests; spikes/ is frozen and isolated (M0 spec §1.2).
