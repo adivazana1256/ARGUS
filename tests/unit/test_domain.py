@@ -40,6 +40,10 @@ SCOPE_CASES: list[tuple[str, DomainScope]] = [
     ("3g2upl4pq6kufc4m.onion", DomainScope.SPECIAL_USE),  # Tor
     ("nothing.invalid", DomainScope.SPECIAL_USE),
     ("unit.test", DomainScope.SPECIAL_USE),
+    # Reverse-DNS and private-use TLDs resolve internally — never actionable.
+    ("1.0.0.127.in-addr.arpa", DomainScope.SPECIAL_USE),
+    ("home.arpa", DomainScope.SPECIAL_USE),
+    ("db.internal", DomainScope.SPECIAL_USE),  # ICANN private-use (SSRF guard)
     # Documentation (RFC 2606 / 6761).
     ("example.com", DomainScope.DOCUMENTATION),
     ("example.net", DomainScope.DOCUMENTATION),

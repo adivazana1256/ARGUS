@@ -36,11 +36,18 @@ Design decisions worth knowing before changing this:
 
 * **A syntactically valid domain is not automatically externally actionable.**
   Only ordinary (PUBLIC) domains are actionable; special-use (localhost, mDNS
-  ``.local``, Tor ``.onion``, RFC 2606/6761 ``.invalid``/``.test``) and
-  documentation (``.example``, ``example.com/.net/.org``) names are not — they
-  are non-resolvable or reserved, and treating ``localhost`` as actionable is an
-  SSRF foot-gun (``docs/SECURITY.md`` §8). No public-suffix list is used:
-  registrable-domain-vs-subdomain is data + dependency, deferred past M1.
+  ``.local``, Tor ``.onion``, RFC 2606/6761 ``.invalid``/``.test``, reverse-DNS
+  ``.arpa``, ICANN private-use ``.internal``) and documentation (``.example``,
+  ``example.com/.net/.org``) names are not — they are non-resolvable, reserved,
+  or resolve to internal hosts, and treating any of them as actionable is an
+  SSRF foot-gun (``docs/SECURITY.md`` §8).
+
+  The special-use set is a denylist of names that may resolve internally;
+  anything unmatched defaults to PUBLIC/actionable. That default is deliberate:
+  inverting to an allowlist needs a public-suffix list (data + dependency,
+  deferred past M1), and this flag is a classification signal — the actual SSRF
+  *enforcement* is owned at the outbound-fetch boundary, not here. No PSL is
+  used, so registrable-domain-vs-subdomain is not distinguished.
 """
 
 from __future__ import annotations
@@ -70,8 +77,12 @@ class DomainScope(StrEnum):
     DOCUMENTATION = "documentation"  # .example and example.com/.net/.org (RFC 2606)
 
 
-# RFC 6761/6762/7686 special-use TLDs that are never ordinary public domains.
-_SPECIAL_TLDS = frozenset({"local", "onion", "invalid", "test"})
+# IANA Special-Use Domain Names (RFC 6761/6762/7686/8375) + the ICANN-reserved
+# private-use `.internal` (2024): TLDs that are never ordinary public domains and
+# may resolve to internal hosts, so they must not be externally actionable (SSRF,
+# docs/SECURITY.md §8). `arpa` covers in-addr.arpa / ip6.arpa / home.arpa via the
+# rightmost-label match; `internal` covers `*.internal`.
+_SPECIAL_TLDS = frozenset({"local", "onion", "invalid", "test", "arpa", "internal"})
 # RFC 6761 documentation TLD.
 _DOCUMENTATION_TLDS = frozenset({"example"})
 # RFC 2606 reserved second-level documentation domains.
