@@ -33,3 +33,17 @@ repos:
       - id: check-merge-conflict
       - id: detect-private-key
       - id: check-added-large-files
+
+  # Block accidental AI/assistant artifacts and mode-banner chatter from landing
+  # in production source. Built-in pygrep — no new dependency, no network. Scoped
+  # to src/ so docs can discuss these tokens freely. Tight, curated pattern: these
+  # strings never appear legitimately in shipped code. (Debug leftovers — stray
+  # print/breakpoint/pdb — are owned by Ruff T10/T20, not duplicated here.)
+  - repo: local
+    hooks:
+      - id: no-ai-artifacts
+        name: block AI artifacts in src
+        language: pygrep
+        entry: "(?i)(ponytail:|caveman mode|ponytail mode active|as an ai( language)? model|<thinking>)"
+        files: ^src/
+        types: [text]
