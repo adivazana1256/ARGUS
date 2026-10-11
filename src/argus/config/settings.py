@@ -21,7 +21,7 @@ from enum import StrEnum
 from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
-from pydantic import field_validator
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -74,6 +74,20 @@ class Settings(BaseSettings):
     # injected at container build via ARGUS_GIT_SHA, "unknown" in local dev.
     version: str = _resolve_version()
     git_sha: str = "unknown"
+
+    # --- Real LLM investigator adapter (M2 Slice 2) ----------------------- #
+    # The API key is the only secret here and is a SecretStr so it is redacted in
+    # repr/str/model_dump; it is read from ARGUS_ANTHROPIC_API_KEY (or .env in dev)
+    # and never logged. None by default: the deterministic model needs no key, so a
+    # process that never uses the real adapter boots without one.
+    anthropic_api_key: SecretStr | None = None
+    # Provider-agnostic at the settings surface, pinned to one model by default
+    # (ADR: one provider initially; see docs/ARCHITECTURE.md §13 Model Gateway).
+    llm_model: str = "claude-opus-4-8"
+    # Per-request timeout (seconds) and SDK-native retry budget for transient
+    # provider errors. Retries stay bounded here, not in the agent loop (T-AI-005).
+    llm_timeout_seconds: float = 30.0
+    llm_max_retries: int = 2
 
     @field_validator("environment", mode="before")
     @classmethod

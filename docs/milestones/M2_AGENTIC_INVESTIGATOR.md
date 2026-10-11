@@ -40,12 +40,46 @@ In:
 
 Out (later slices / own ADR):
 
-- New model providers / live model calls (a deterministic model stand-in drives the
-  loop in tests, as in the spike). Real provider wiring + Model Gateway is a later
-  slice.
+- Live model calls (a deterministic model stand-in drives the loop in tests, as in
+  the spike). Real provider wiring is **Slice 2** (below).
 - RAG/knowledge retrieval, MCP servers, Correlation/Knowledge/Verification agents
   beyond the Investigator/Orchestrator, vector DB, PostgreSQL, Redis, frontend,
   deployment.
+
+## 1a. Scope — M2 Slice 2 (Real LLM Investigator Adapter)
+
+Connects the Slice 1 loop to a real, production-compatible model while keeping the
+evidence-first, application-controlled authorization model intact.
+
+In:
+
+- A second implementation of the existing `InvestigatorModel` port,
+  `infrastructure/anthropic_investigator.py`, behind the same abstraction — the
+  deterministic stand-in stays the model for tests/CI and is unchanged.
+- One provider (Anthropic), one model (`ARGUS_LLM_MODEL`, default `claude-opus-4-8`).
+  No multi-provider/Model-Gateway abstraction yet (deferred to its own ADR; see
+  `ARCHITECTURE.md` §13). The settings surface is provider-agnostic.
+- **Strict structured output.** The decision is requested as a constrained JSON
+  schema (action ∈ {propose_tool, conclude}, tool_name ∈ `ToolName` ∪ null, note)
+  and re-validated into an `AgentDecision` here — model output is untrusted input
+  (`T-AI-004`), never trusted inline.
+- **Explicit failure handling.** Refusal, empty, malformed, timeout or any
+  provider error (after the SDK's bounded retries) fails safe: the adapter returns
+  an `AgentAction.ABORT` the graph maps to the enumerated
+  `TerminationReason.MODEL_UNAVAILABLE` terminal — never a crash, a retry in the
+  loop, or fabricated evidence. Distinct from `NO_ACTIONABLE_STEP` (model chose to
+  stop) so a tooling failure is never mistaken for a decision.
+- Secrets from settings/env only (`ARGUS_ANTHROPIC_API_KEY` as `SecretStr`); never
+  logged. Observability logs the request/decision (model, iteration, action, tool,
+  stop) with no secrets, no raw model text, no evidence payloads.
+- Deterministic adapter tests (fake client, no network) + `tests/eval/` scenarios
+  for the real-model boundary; a manual, CI-excluded smoke example
+  (`examples/real_model_investigation.py`).
+
+Out (unchanged from Slice 1 above): everything the deterministic graph, policy,
+bounds, HITL and evidence path already own stays exactly as-is — this slice only
+swaps *where the next proposed action comes from*. No new tools, no multi-provider
+abstraction, no change to the deterministic core.
 
 ## 2. Architecture
 

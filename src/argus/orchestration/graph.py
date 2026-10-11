@@ -82,6 +82,14 @@ def build_investigation_graph(
 
     def decide(state: InvestigationState) -> dict[str, object]:
         decision = model.propose_next_action(state)
+        if decision.action is AgentAction.ABORT:
+            # The model boundary failed safe (T-AI-004). Record the reason as DATA
+            # and route to the explicit MODEL_UNAVAILABLE terminal — never retry or
+            # fabricate a step. The graph, not the model, owns this stop.
+            return {
+                "last_action": AgentAction.ABORT,
+                "events": state.recorded("decide", action="abort", note=decision.note),
+            }
         if decision.action is AgentAction.CONCLUDE:
             return {
                 "last_action": AgentAction.CONCLUDE,
@@ -239,13 +247,22 @@ def build_investigation_graph(
             "events": state.recorded("approval_rejected"),
         }
 
+    def model_unavailable(state: InvestigationState) -> dict[str, object]:
+        return {
+            "termination_reason": TerminationReason.MODEL_UNAVAILABLE,
+            "status": OrchestrationStatus.FAILED,
+            "pending_approval": None,
+            "current_request": None,
+            "events": state.recorded("model_unavailable"),
+        }
+
     # --- routers ----------------------------------------------------------- #
     def route_after_decide(state: InvestigationState) -> str:
-        return (
-            "policy_check"
-            if state.last_action is AgentAction.PROPOSE_TOOL
-            else "conclude"
-        )
+        if state.last_action is AgentAction.PROPOSE_TOOL:
+            return "policy_check"
+        if state.last_action is AgentAction.ABORT:
+            return "model_unavailable"
+        return "conclude"
 
     def route_policy(state: InvestigationState) -> str:
         decision = state.policy_decision
@@ -297,13 +314,14 @@ def build_investigation_graph(
         ("deny", deny),
         ("retry_exhausted", retry_exhausted),
         ("rejected", rejected),
+        ("model_unavailable", model_unavailable),
     ]:
         graph.add_node(name, fn)
 
     graph.add_edge(START, "plan")
     graph.add_edge("plan", "decide")
     graph.add_conditional_edges(
-        "decide", route_after_decide, ["policy_check", "conclude"]
+        "decide", route_after_decide, ["policy_check", "conclude", "model_unavailable"]
     )
     graph.add_conditional_edges(
         "policy_check", route_policy, ["deny", "mark_pause", "execute_tool"]
@@ -318,7 +336,13 @@ def build_investigation_graph(
         ["execute_tool", "verify", "retry_exhausted"],
     )
     graph.add_conditional_edges("verify", route_completion, ["decide", "conclude"])
-    for terminal in ("conclude", "deny", "retry_exhausted", "rejected"):
+    for terminal in (
+        "conclude",
+        "deny",
+        "retry_exhausted",
+        "rejected",
+        "model_unavailable",
+    ):
         graph.add_edge(terminal, END)
 
     return graph.compile(checkpointer=build_checkpointer())

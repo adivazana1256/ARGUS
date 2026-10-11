@@ -99,8 +99,8 @@ def test_secret_redaction() -> None:
 
 
 def test_settings_dump_has_no_secret_value_leak() -> None:
-    # Production Settings has no secret fields in M0; this guards against a
-    # future secret field being added without SecretStr.
+    # The field set is pinned so a new field can't slip in unreviewed; a new
+    # *secret* field must be a SecretStr (asserted below).
     dumped = load_settings(_env_file=None).model_dump()
     assert set(dumped) == {
         "environment",
@@ -108,4 +108,28 @@ def test_settings_dump_has_no_secret_value_leak() -> None:
         "service_name",
         "version",
         "git_sha",
+        "anthropic_api_key",
+        "llm_model",
+        "llm_timeout_seconds",
+        "llm_max_retries",
     }
+
+
+def test_llm_defaults() -> None:
+    settings = load_settings(_env_file=None)
+    assert settings.anthropic_api_key is None  # no key needed unless the real adapter
+    assert settings.llm_model == "claude-opus-4-8"
+    assert settings.llm_timeout_seconds == 30.0
+    assert settings.llm_max_retries == 2
+
+
+def test_anthropic_api_key_is_redacted_everywhere() -> None:
+    from pydantic import SecretStr
+
+    settings = load_settings(_env_file=None, anthropic_api_key="sk-super-secret")
+    # Env-sourced secret is a SecretStr: its value never appears in repr/str or
+    # model_dump() used in ordinary diagnostics.
+    assert isinstance(settings.anthropic_api_key, SecretStr)
+    assert "sk-super-secret" not in repr(settings)
+    assert "sk-super-secret" not in str(settings.model_dump())
+    assert settings.anthropic_api_key.get_secret_value() == "sk-super-secret"

@@ -15,6 +15,7 @@ dependencies = [
   # domain/application never import it. Pulls langgraph-checkpoint transitively
   # (MemorySaver). Scanned by pip-audit/CodeQL like any runtime dep.
   "langgraph>=1,<2",
+  "anthropic>=1.13.0",
 ]
 
 [dependency-groups]

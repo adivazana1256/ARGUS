@@ -70,6 +70,11 @@ class TerminationReason(StrEnum):
     # Model concluded without decisive evidence and with no further action to
     # propose. An explicit, enumerated stop — never an implicit fall-through.
     NO_ACTIONABLE_STEP = "no_actionable_step"
+    # The model could not produce a usable decision (provider error/timeout,
+    # refusal, empty, or schema-invalid output). Distinct from NO_ACTIONABLE_STEP
+    # so a *tooling* failure is never mistaken for the model deciding to stop
+    # (T-AI-004: untrusted model output fails safe, it is not acted on).
+    MODEL_UNAVAILABLE = "model_unavailable"
 
 
 class ApprovalDecision(StrEnum):
@@ -78,10 +83,17 @@ class ApprovalDecision(StrEnum):
 
 
 class AgentAction(StrEnum):
-    """Shape of a model proposal: reach for a tool, or stop."""
+    """Shape of a model proposal: reach for a tool, or stop.
+
+    ``ABORT`` is not a shape the *model* ever emits — the structured decision
+    schema only offers ``PROPOSE_TOOL``/``CONCLUDE``. It is the adapter's safe
+    signal that no usable decision could be obtained (provider error, refusal,
+    empty or schema-invalid output); the graph maps it to an explicit
+    ``MODEL_UNAVAILABLE`` terminal rather than fabricating a next step."""
 
     PROPOSE_TOOL = "propose_tool"
     CONCLUDE = "conclude"
+    ABORT = "abort"
 
 
 class ToolRequest(BaseModel):
@@ -142,8 +154,9 @@ class AgentDecision(BaseModel):
     def _require_tool_for_proposal(self) -> AgentDecision:
         if self.action is AgentAction.PROPOSE_TOOL and self.tool_name is None:
             raise ValueError("PROPOSE_TOOL requires a tool_name")
-        if self.action is AgentAction.CONCLUDE and self.tool_name is not None:
-            raise ValueError("CONCLUDE must not carry a tool_name")
+        # Only a tool proposal carries a tool_name; CONCLUDE and ABORT never do.
+        if self.action is not AgentAction.PROPOSE_TOOL and self.tool_name is not None:
+            raise ValueError(f"{self.action.value} must not carry a tool_name")
         return self
 
 
