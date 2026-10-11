@@ -16,14 +16,22 @@ Dependency matrix (``source layer -> forbidden target layers``), derived from
 (config/observability are cross-cutting and import no layer; nothing imports
 spikes):
 
-    domain          -> application, api, infrastructure, observability, config, spikes
-    application      -> api, infrastructure, spikes
-    config           -> domain, application, api, infrastructure, observability, spikes
-    observability    -> domain, application, api, infrastructure, spikes
-                         (observability may import config)
-    api              -> infrastructure, spikes
-    infrastructure   -> spikes
-    <argus root>     -> spikes   (e.g. main.py)
+    domain         -> application, orchestration, api, infrastructure,
+                      observability, config, spikes
+    application    -> orchestration, api, infrastructure, spikes
+    orchestration  -> api, infrastructure, spikes
+    config         -> domain, application, orchestration, api, infrastructure,
+                      observability, spikes
+    observability  -> domain, application, orchestration, api, infrastructure,
+                      spikes  (observability may import config)
+    api            -> infrastructure, spikes
+    infrastructure -> spikes
+    <argus root>   -> spikes   (e.g. main.py)
+
+    orchestration is the AI Orchestration Layer (docs/ARCHITECTURE.md §5, ADR-002):
+    it may import domain + application (and LangGraph), api may import it, and the
+    inner layers (domain, application) must never import it — so the deterministic
+    core stays independent of the agent framework.
 
 Only argus-internal layer dependencies and ``spikes`` are governed here.
 Standard-library and third-party imports (os, fastapi, pydantic, ...) are
@@ -43,14 +51,33 @@ ARGUS_ROOT_LAYER = "<argus-root>"
 # listing it as a forbidden target where other layers must not reach it).
 FORBIDDEN: dict[str, frozenset[str]] = {
     "domain": frozenset(
-        {"application", "api", "infrastructure", "observability", "config", "spikes"}
+        {
+            "application",
+            "orchestration",
+            "api",
+            "infrastructure",
+            "observability",
+            "config",
+            "spikes",
+        }
     ),
-    "application": frozenset({"api", "infrastructure", "spikes"}),
+    "application": frozenset({"orchestration", "api", "infrastructure", "spikes"}),
+    # Orchestration (LangGraph) may use domain + application; it must not reach
+    # outward into api/infrastructure (adapters are injected at the root).
+    "orchestration": frozenset({"api", "infrastructure", "spikes"}),
     "config": frozenset(
-        {"domain", "application", "api", "infrastructure", "observability", "spikes"}
+        {
+            "domain",
+            "application",
+            "orchestration",
+            "api",
+            "infrastructure",
+            "observability",
+            "spikes",
+        }
     ),
     "observability": frozenset(
-        {"domain", "application", "api", "infrastructure", "spikes"}
+        {"domain", "application", "orchestration", "api", "infrastructure", "spikes"}
     ),
     "api": frozenset({"infrastructure", "spikes"}),
     "infrastructure": frozenset({"spikes"}),
@@ -229,6 +256,40 @@ def test_forbidden_layer_dependency_is_flagged() -> None:
         package_parts=("argus", "application"),
     )
     assert [v.target_layer for v in violations] == ["api"]
+
+
+def test_application_importing_orchestration_is_flagged() -> None:
+    # The deterministic core must never depend on the agent framework layer.
+    violations = check_source(
+        "from argus.orchestration.graph import build_investigation_graph\n",
+        source_layer="application",
+        package_parts=("argus", "application"),
+    )
+    assert [v.target_layer for v in violations] == ["orchestration"]
+
+
+def test_orchestration_importing_infrastructure_is_flagged() -> None:
+    # Orchestration may use domain/application, but adapters are injected at the
+    # root — it must not reach into infrastructure directly.
+    violations = check_source(
+        "from argus.infrastructure.deterministic_model import X\n",
+        source_layer="orchestration",
+        package_parts=("argus", "orchestration"),
+    )
+    assert [v.target_layer for v in violations] == ["infrastructure"]
+
+
+def test_orchestration_importing_application_passes() -> None:
+    # orchestration -> application / domain is the allowed direction.
+    assert (
+        check_source(
+            "from argus.application.collection import collect\n"
+            "from argus.domain.ioc import Ioc\n",
+            source_layer="orchestration",
+            package_parts=("argus", "orchestration"),
+        )
+        == []
+    )
 
 
 def test_domain_importing_infrastructure_is_flagged() -> None:
